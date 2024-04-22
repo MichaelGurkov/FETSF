@@ -29,7 +29,6 @@ train_set = passengers_df.iloc[:-holdout_size].copy()
 test_set = passengers_df.iloc[-holdout_size:].copy()
 
 def preprocess_data(temp_df):
-       
     temp_df["trend"] = np.round((temp_df.index - pd.to_datetime("1949-01-01")) / np.timedelta64(4, "W"))
     
     temp_df["trend2"] = temp_df["trend"] ** 2
@@ -38,12 +37,6 @@ def preprocess_data(temp_df):
       
     X_mat = temp_df.copy().drop("y", axis = 1)
     
-# =============================================================================
-#     X_mat_scaled = min_scale.fit_transform(X_mat.copy())
-#     
-#     X_mat_scaled = pd.DataFrame(X_mat_scaled, columns = X_mat.columns)
-#     
-# =============================================================================
     y_vec = temp_df.copy()["y"]
     
     return([X_mat, y_vec])
