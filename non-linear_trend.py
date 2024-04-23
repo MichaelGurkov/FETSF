@@ -14,6 +14,8 @@ from sklearn.preprocessing import MinMaxScaler
 
 from sklearn.tree import DecisionTreeRegressor
 
+from sklearn.metrics import root_mean_squared_error
+
 # Import data
 passengers_df = pd.read_csv("C:\\Users\\Home\\Documents\\FETSF\\data\\example_air_passengers.csv",
                             index_col=["ds"], parse_dates=["ds"])
@@ -93,3 +95,8 @@ sns.lineplot(data=lin_reg_plot_df.reset_index(), x="ds", y="y", hue="split", mar
 sns.lineplot(data=lin_reg_plot_df.reset_index(), x="ds", y="pred", style="split", dashes=True, color = "black")
 
 
+# Evaluation
+
+train_rmse = root_mean_squared_error(y_train, lin_reg_train_pred)
+
+test_rmse = root_mean_squared_error(y_test, lin_reg_test_pred)
