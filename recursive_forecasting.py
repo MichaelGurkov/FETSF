@@ -1,3 +1,5 @@
+#%% Import libraries
+
 
 import os
 
@@ -22,6 +24,12 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
 
 import seaborn as sns
+
+#%%
+
+
+
+
 
 # Import air_quality
 
@@ -63,6 +71,7 @@ air_quality = load_air_quality(air_quality_folder_path + "\\AirQualityUCI_ready.
 train_set = air_quality[air_quality.index < "2005-03-04"]
 test_set = air_quality[air_quality.index >= pd.Timestamp("2005-03-04") - pd.offsets.Hour(24)]
 
+del air_quality, air_quality_folder_path
 
 # Preprocess air_quality
 
@@ -125,62 +134,72 @@ def get_X_mat(temp_df):
         
     return X_mat
 
-# Forecast step by step
+def get_next_perid_features(data_df):
+    
+    temp_data = data_df.copy()
 
-def forecast_next_step(data_df, model):
+    forecast_date = temp_data.index[len(temp_data.index)- 1] + pd.offsets.Hour(1)
+        
+    temp_data.loc[forecast_date] = np.nan
+
+    next_pred_X_mat = get_X_mat(temp_data.copy())
     
+    return next_pred_X_mat
+
+def forecast_next_step(temp_data, fitted_model):
+    
+    next_pred_X_mat = get_next_perid_features(temp_data)
+
+    next_pred = fitted_model.predict(next_pred_X_mat)
+
+    next_pred = pd.DataFrame(data = next_pred,
+                             index = next_pred_X_mat.index, columns = ['CO_sensor', 'RH'])
+
+    temp_data = pd.concat([temp_data.iloc[1:].copy(), next_pred])
+    
+    return([next_pred, temp_data])
+
+def forecast_entire_horizon(data_df, model, horizon):
+    
+    ## Make data for model
+
     X_mat = get_X_mat(data_df)
-    
+
     Y_mat = data_df.loc[X_mat.index]
-    
+
+    ## Fit model
+
     model.fit(X_mat, Y_mat)
 
-    # Make forecast input data    
+    predictions_df = []
 
-    predict_data = data_df.iloc[-24:].copy()
+
+    ## Make next step
     
-    forecast_date = predict_data.index[len(predict_data.index)- 1] + pd.offsets.Hour(1)
+    temp_data = data_df.iloc[-24:].copy()
+
+    for i in range(horizon):      
+        next_pred, temp_data = forecast_next_step(temp_data, fitted_model = model)
         
-    predict_data.loc[forecast_date] = np.nan
-    
-    next_pred_X_mat = get_X_mat(predict_data.copy())
-    
-    next_pred = model.predict(next_pred_X_mat)
-    
-    next_pred = pd.DataFrame(data = next_pred,
-                             columns = data_df.columns.values,
-                             index = [forecast_date])
-    
-    return next_pred
+        predictions_df.append(next_pred)
 
 
-# Forecast 24 hours
+    predictions_df = pd.concat(predictions_df)
+    
+    return predictions_df
 
-temp_data = train_set.copy()
-
-for i in range(24):
-    print(i)
     
-    next_pred = forecast_next_step(data_df = temp_data,
-                               model = MultiOutputRegressor(Lasso(random_state=0)))
-    
-    temp_data = pd.concat([temp_data.copy(), next_pred])
-    
+prediction_df = forecast_entire_horizon(data_df = train_set.copy(),
+                                        model = MultiOutputRegressor(Lasso(random_state=0)),
+                                        horizon = len(test_set))
 
 # Plot 
 
-temp_data.loc[test_set.index]
+plot_df = pd.melt(pd.merge(test_set["CO_sensor"], prediction_df["CO_sensor"],
+         left_index=True,
+         right_index=True,
+         suffixes=["_true","_predict"]).reset_index(), id_vars="Date_Time")
 
-pred_data = temp_data.iloc[-24:].copy()
+sns.lineplot(plot_df, x = "Date_Time", y = "value", hue = "variable")
 
-pd.melt(pred_data,)
-
-plot_df = test_set[["CO_sensor"]].loc[pred_data.index].join(pred_data[["CO_sensor"]],
-                                   lsuffix = "_actual", rsuffix = "_pred")
-
-mean_squared_error(test_set["CO_sensor"].loc[pred_data.index], pred_data["CO_sensor"],squared=False)
-
-mean_squared_error(test_set["RH"].loc[pred_data.index], pred_data["RH"],squared=False)
-
-sns.lineplot(pd.melt(plot_df.reset_index(), id_vars="index"),
-             x = "index", y = "value", hue = "variable")
+mean_squared_error(test_set["CO_sensor"], prediction_df["CO_sensor"], squared=False)
